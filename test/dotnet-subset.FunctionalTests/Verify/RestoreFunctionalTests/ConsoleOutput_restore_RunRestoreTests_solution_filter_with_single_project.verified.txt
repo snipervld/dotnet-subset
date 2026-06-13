@@ -1,0 +1,8 @@
+﻿Found 1 project(s) to copy:
+ - {SourceRootDirectory}/Project1/Project1.csproj
+
+Found 2 extra file(s) to copy:
+ - {SourceRootDirectory}/Directory.Build.props
+ - {SourceRootDirectory}/Directory.Build.targets
+
+Copied 3 file(s) to '{OutputDirectory}'. 0 file(s) already exist in destination.

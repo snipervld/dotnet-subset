@@ -5,10 +5,10 @@ namespace Nimbleways.Tools.Subset.Helpers;
 
 internal static class DotnetSubsetRunner
 {
-    public static DescriptorExecutionResult AssertDescriptor(RestoreTestDescriptor restoreTestDescriptor, DirectoryInfo output, int? overriddenExpectedExitCode = null, bool noLogo = true)
+    public static DescriptorExecutionResult AssertDescriptor(TestDescriptor descriptor, DirectoryInfo output, int? overriddenExpectedExitCode = null, bool noLogo = true)
     {
-        DescriptorExecutionResult executionResult = Run(restoreTestDescriptor, output, noLogo);
-        Assert.Equal(overriddenExpectedExitCode ?? restoreTestDescriptor.ExitCode, executionResult.ExitCode);
+        DescriptorExecutionResult executionResult = Run(descriptor, output, noLogo);
+        Assert.Equal(overriddenExpectedExitCode ?? descriptor.ExitCode, executionResult.ExitCode);
         return executionResult;
     }
 
@@ -19,25 +19,25 @@ internal static class DotnetSubsetRunner
             : RunMain(subsetArgs, workingDirectory);
     }
 
-    private static DescriptorExecutionResult Run(RestoreTestDescriptor restoreTestDescriptor, DirectoryInfo output, bool noLogo)
+    private static DescriptorExecutionResult Run(TestDescriptor descriptor, DirectoryInfo output, bool noLogo)
     {
-        var subsetArgs = GetSubsetArgs(restoreTestDescriptor, output, noLogo);
-        DirectoryInfo workingDirectory = restoreTestDescriptor.Root;
+        var subsetArgs = GetSubsetArgs(descriptor, output, noLogo);
+        DirectoryInfo workingDirectory = descriptor.Root;
         ExecutionResult result = Run(subsetArgs, workingDirectory);
-        return new DescriptorExecutionResult(restoreTestDescriptor, output, result.ExitCode, result.ConsoleOutput, isOutOfProcess: result.IsOutOfProcess);
+        return new DescriptorExecutionResult(descriptor, output, result.ExitCode, result.ConsoleOutput, isOutOfProcess: result.IsOutOfProcess);
     }
 
-    private static string[] GetSubsetArgs(RestoreTestDescriptor restoreTestDescriptor, DirectoryInfo output, bool noLogo)
+    private static string[] GetSubsetArgs(TestDescriptor descriptor, DirectoryInfo output, bool noLogo)
     {
-        string projectOrSolution = Path.Combine(restoreTestDescriptor.Root.FullName, restoreTestDescriptor.CommandInputs.ProjectOrSolution);
+        string projectOrSolution = Path.Combine(descriptor.Root.FullName, descriptor.ProjectOrSolution);
         var args = new[]
         {
-            "restore",
+            descriptor.OperationName,
             projectOrSolution,
             "--output",
             output.FullName,
             "--root-directory",
-            restoreTestDescriptor.Root.FullName
+            descriptor.Root.FullName
         };
         if (noLogo)
         {

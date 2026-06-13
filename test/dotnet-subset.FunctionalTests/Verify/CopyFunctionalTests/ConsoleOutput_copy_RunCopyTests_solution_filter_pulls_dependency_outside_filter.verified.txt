@@ -1,0 +1,5 @@
+﻿Found 2 project(s) to copy:
+ - {SourceRootDirectory}/Project1/Project1.csproj
+ - {SourceRootDirectory}/Project2/Project2.csproj
+
+Copied 4 file(s) to '{OutputDirectory}'. 0 file(s) already exist in destination.

@@ -98,6 +98,7 @@ internal static class TestHelpers
             descriptors.AddRange(key switch
             {
                 "restore" => GetRestoreDescriptors(tables, sampleDirectory),
+                "copy" => GetCopyDescriptors(tables, sampleDirectory),
                 _ => throw new NotSupportedException($"Table name '{key}' is not supported"),
             });
         }
@@ -108,6 +109,12 @@ internal static class TestHelpers
     {
         return tables.Select(ToModel<RestoreTable>)
             .Select(rt => new RestoreTestDescriptor(sampleDirectory, rt.RootDirectory ?? "root", rt.TestName.AsNotNull(), new RestoreCommandInputs(rt.ProjectOrSolution.AsNotNull()), rt.ExitCode ?? 0));
+    }
+
+    private static IEnumerable<CopyTestDescriptor> GetCopyDescriptors(TomlTableArray tables, DirectoryInfo sampleDirectory)
+    {
+        return tables.Select(ToModel<CopyTable>)
+            .Select(ct => new CopyTestDescriptor(sampleDirectory, ct.RootDirectory ?? "root", ct.TestName.AsNotNull(), new CopyCommandInputs(ct.ProjectOrSolution.AsNotNull()), ct.ExitCode ?? 0));
     }
 
     private static T ToModel<T>(TomlTable table) where T : class, new()

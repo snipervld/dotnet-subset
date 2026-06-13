@@ -1,0 +1,11 @@
+# Project1 is the only project listed in the filter, but it references Project2.
+# This proves a .slnf pulls transitive ProjectReference dependencies that are
+# NOT listed in the filter (as long as they are under --root-directory).
+
+[[restore]]
+test_name="solution_filter_pulls_dependency_outside_filter"
+project_or_solution="FilteredProject1.slnf"
+
+[[copy]]
+test_name="solution_filter_pulls_dependency_outside_filter"
+project_or_solution="FilteredProject1.slnf"

@@ -3,6 +3,7 @@ using System.CommandLine.Builder;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 
+using Nimbleways.Tools.Subset.Commands;
 using Nimbleways.Tools.Subset.Exceptions;
 
 namespace Nimbleways.Tools.Subset;
@@ -13,6 +14,7 @@ internal static class CommandLineParser
     {
         var rootCommand = new RootCommand(".NET Tool to copy a subset of files from a repository to a directory.");
         rootCommand.AddCommand(GetRestoreCommand());
+        rootCommand.AddCommand(GetCopyCommand());
         return GetCommandLineBuilder(rootCommand).Build();
     }
 
@@ -68,7 +70,34 @@ internal static class CommandLineParser
             NoLogoOption,
         };
         restoreCommand.AddArgument(projectOrSolutionArgument);
-        restoreCommand.SetHandler(RestoreSubset.Execute, projectOrSolutionArgument, rootDirectoryOption, outputDirectoryOption);
+        restoreCommand.SetHandler(new RestoreSubset().Execute, projectOrSolutionArgument, rootDirectoryOption, outputDirectoryOption);
         return restoreCommand;
+    }
+
+    private static Command GetCopyCommand()
+    {
+        var projectOrSolutionArgument = new Argument<FileInfo>(
+            name: "projectOrSolution",
+            description: "Project or solution to restore.");
+
+        var rootDirectoryOption = new Option<DirectoryInfo>(
+            name: "--root-directory",
+            description: "Directory from where the files will be copied, usually the repository's root.")
+        { IsRequired = true };
+
+        var outputDirectoryOption = new Option<DirectoryInfo>(
+            name: "--output",
+            description: "Directory where the subset files will be copied, preserving the original hierarchy.")
+        { IsRequired = true };
+
+        var copyCommand = new Command("copy", "Create subset of files, including all files of relevant projects.")
+        {
+            rootDirectoryOption,
+            outputDirectoryOption,
+            NoLogoOption,
+        };
+        copyCommand.AddArgument(projectOrSolutionArgument);
+        copyCommand.SetHandler(new CopySubset().Execute, projectOrSolutionArgument, rootDirectoryOption, outputDirectoryOption);
+        return copyCommand;
     }
 }

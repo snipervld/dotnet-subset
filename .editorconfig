@@ -356,7 +356,7 @@ dotnet_naming_style.s_camelcase.capitalization = camel_case
 
 #### Custom config ####
 
-dotnet_analyzer_diagnostic.severity = error
+#dotnet_diagnostic.IDE0055.severity = error
 
 csharp_style_namespace_declarations = file_scoped
 
@@ -393,7 +393,15 @@ dotnet_diagnostic.IDE0280.severity = none
 
 #### Custom config for entrypoint projects ####
 
-[**/Program.cs]
+# CS8602: Dereference of a possibly null reference.
+dotnet_diagnostic.CS8602.severity = none # remove?
+
+# CS8604: Possible null reference argument for parameter.
+dotnet_diagnostic.CS8604.severity = none # remove?
+
+# CA1515: Consider making public types internal
+dotnet_diagnostic.CA1515.severity = none
+
 # CA1812: Avoid uninstantiated internal classes
 dotnet_diagnostic.CA1812.severity = none
 

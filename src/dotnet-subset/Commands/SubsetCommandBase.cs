@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 using Common;
 
 using Microsoft.Build.Construction;
@@ -5,46 +8,26 @@ using Microsoft.Build.Evaluation;
 
 using Nimbleways.Tools.Subset.Exceptions;
 
-namespace Nimbleways.Tools.Subset;
-internal static class RestoreSubset
+namespace Nimbleways.Tools.Subset.Commands;
+
+internal abstract class SubsetCommandBase
 {
-    public static void Execute(FileInfo projectOrSolution, DirectoryInfo rootFolder, DirectoryInfo destinationFolder)
+    public void Execute(FileInfo projectOrSolution, DirectoryInfo rootFolder, DirectoryInfo destinationFolder)
     {
         if (!IsSameOrUnder(rootFolder, projectOrSolution))
         {
             throw new InvalidRootDirectoryException(projectOrSolution, rootFolder);
         }
 
-        using var projectCollection = new ProjectCollection();
-        var projectsByFullPath = new Dictionary<string, Project>();
-        foreach (var project in GetRootProjects(projectOrSolution))
-        {
-            VisitAllProjects(projectCollection, rootFolder, project, projectsByFullPath);
-        }
-        var projectListAsString = string.Join(Environment.NewLine + " - ", projectsByFullPath.Keys.OrderBy(f => f));
-        Console.WriteLine($"Found {projectsByFullPath.Count} project(s) to copy:{Environment.NewLine + " - "}{projectListAsString}");
-        Console.WriteLine();
-        var nugetConfigFiles = GetNugetConfigFiles(rootFolder, projectsByFullPath);
-        var extraFilesInvolvedInRestore = projectsByFullPath.Values
-            .SelectMany(project => GetExtraFilesInvolvedInRestore(rootFolder, project))
-            .Concat(nugetConfigFiles)
-            .Distinct(FileInfoComparer.Instance)
-            .ToList();
-        if (IsSolutionFile(projectOrSolution))
-        {
-            extraFilesInvolvedInRestore.Add(projectOrSolution);
-        }
-        if (extraFilesInvolvedInRestore.Count > 0)
-        {
-            var extraFilesInvolvedInRestoreAsString = string.Join(Environment.NewLine + " - ", extraFilesInvolvedInRestore.Select(f => f.FullName).OrderBy(f => f));
-            Console.WriteLine($"Found {extraFilesInvolvedInRestore.Count} extra file(s) to copy:{Environment.NewLine + " - "}{extraFilesInvolvedInRestoreAsString}");
-            Console.WriteLine();
-        }
-        var allFilesToCopy = projectsByFullPath.Keys
-            .Select(fullPath => new FileInfo(fullPath))
-            .Concat(extraFilesInvolvedInRestore)
-            .Distinct(FileInfoComparer.Instance);
+        var allFilesToCopy = GetFilesToCopy(projectOrSolution, rootFolder);
 
+        CopyFiles(rootFolder, destinationFolder, allFilesToCopy);
+    }
+
+    protected abstract IEnumerable<FileInfo> GetFilesToCopy(FileInfo projectOrSolution, DirectoryInfo rootFolder);
+
+    private static void CopyFiles(DirectoryInfo rootFolder, DirectoryInfo destinationFolder, IEnumerable<FileInfo> allFilesToCopy)
+    {
         int allFilesCount = 0;
         int copiedFilesCount = 0;
         foreach (var file in allFilesToCopy)
@@ -70,21 +53,78 @@ internal static class RestoreSubset
         return new FileInfo(Path.Combine(newRoot.FullName, Path.GetRelativePath(oldRoot.FullName, file.FullName)));
     }
 
-    private static IEnumerable<FileInfo> GetRootProjects(FileInfo projectOrSolution)
+    protected static IEnumerable<FileInfo> GetRootProjects(FileInfo projectOrSolution)
     {
+        // SolutionFile.Parse supports .slnf as of 18.7.1, but returns all projects, so cannot be used
+        // MS's new SolutionPersistence doesn't support filters at all, so keep manual slnf parsing
         if (IsSolutionFile(projectOrSolution))
         {
             var solution = SolutionFile.Parse(projectOrSolution.FullName);
+
             return solution.ProjectsInOrder
                 .Where(p => p.ProjectType != SolutionProjectType.SolutionFolder)
                 .Select(p => new FileInfo(p.AbsolutePath));
         }
-        return new[] { projectOrSolution };
+
+        if (!IsSolutionFilterFile(projectOrSolution))
+        {
+            return new[] { projectOrSolution };
+        }
+
+        var solutionFilter =
+            JsonSerializer.Deserialize<SolutionFilter>(
+                File.ReadAllText(projectOrSolution.FullName));
+
+        // Make sure it is cross-platform using only forward slashes
+        var normalizedDirectoryName = NormalizePath(projectOrSolution.DirectoryName) ??
+                                      throw new InvalidOperationException(
+                                          "projectOrSolution.DirectoryName cannot be null");
+
+        var normalizedSolutionPath = NormalizePath(solutionFilter.Solution?.Path) ??
+                                     throw new InvalidOperationException(
+                                         "solutionFilter.Solution.Path cannot be null");
+
+        var solutionFilePath =
+            Path.GetFullPath(Path.Combine(normalizedDirectoryName, normalizedSolutionPath));
+
+        var solutionDirectory = NormalizePath(Path.GetDirectoryName(solutionFilePath)) ??
+                                throw new InvalidOperationException(
+                                    "solutionDirectory cannot be null");
+
+        var projects = solutionFilter.Solution?.Projects ??
+                       throw new InvalidOperationException(
+                           "solutionFilter.Solution.Projects cannot be null");
+
+        var result = projects
+            .Select(path =>
+            {
+                var normalizedPath = NormalizePath(path) ??
+                                     throw new InvalidOperationException(
+                                         "projects path cannot be null");
+
+                var projectPath =
+                    Path.GetFullPath(Path.Combine(solutionDirectory, normalizedPath));
+
+                return new FileInfo(projectPath);
+            });
+
+        return result;
     }
 
-    private static bool IsSolutionFile(FileInfo projectOrSolution)
+    private static string? NormalizePath(string? path)
     {
-        return ".sln".Equals(projectOrSolution.Extension, StringComparison.OrdinalIgnoreCase);
+        return path?.Replace('\\', '/');
+    }
+
+    private static bool IsSolutionFilterFile(FileInfo projectOrSolution)
+    {
+        return ".slnf".Equals(projectOrSolution.Extension, StringComparison.OrdinalIgnoreCase);
+    }
+
+    protected static bool IsSolutionFile(FileInfo projectOrSolution)
+    {
+        return ".sln".Equals(projectOrSolution.Extension, StringComparison.OrdinalIgnoreCase)
+            || ".slnx".Equals(projectOrSolution.Extension, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSameOrUnder(DirectoryInfo rootFolder, FileSystemInfo path)
@@ -104,7 +144,7 @@ internal static class RestoreSubset
         return new FileInfo(fullFilePath);
     }
 
-    private static void VisitAllProjects(ProjectCollection projectCollection, DirectoryInfo rootFolder, FileInfo projectPath, Dictionary<string, Project> projects)
+    protected static void VisitAllProjects(ProjectCollection projectCollection, DirectoryInfo rootFolder, FileInfo projectPath, Dictionary<string, Project> projects)
     {
         var projectFileInfo = GetFullPathWithOriginalCase(projectPath);
         if (projects.ContainsKey(projectFileInfo.FullName) || !IsSameOrUnder(rootFolder, projectFileInfo))
@@ -139,7 +179,7 @@ internal static class RestoreSubset
             .Select(name => GetFullPathWithOriginalCase(GetFileInfo(name, projectFolder)))
             .FirstOrDefault(f => f.Exists);
     }
-    private static IEnumerable<FileInfo> GetExtraFilesInvolvedInRestore(DirectoryInfo rootFolder, Project project)
+    protected static IEnumerable<FileInfo> GetExtraFilesInvolvedInRestore(DirectoryInfo rootFolder, Project project)
     {
         var projectFolder = Path.GetDirectoryName(project.FullPath);
         var packagesLockFile = GetPackagesLockFile(new DirectoryInfo(projectFolder), project);
@@ -159,7 +199,7 @@ internal static class RestoreSubset
 
     private static readonly string[] NugetConfigFilenames = new[] { "nuget.config", "NuGet.config", "NuGet.Config" };
 
-    private static IEnumerable<FileInfo> GetNugetConfigFiles(DirectoryInfo rootFolder, Dictionary<string, Project> projects)
+    protected static IEnumerable<FileInfo> GetNugetConfigFiles(DirectoryInfo rootFolder, Dictionary<string, Project> projects)
     {
         static void GetNugetConfigFiles(DirectoryInfo rootFolder, DirectoryInfo folder, IDictionary<string, FileInfo> nugetConfigFiles)
         {
@@ -234,5 +274,17 @@ internal static class RestoreSubset
         while (len1 == 0 || len2 == 0);
 
         return true;
+    }
+
+    private class SolutionFilter
+    {
+        [JsonPropertyName("solution")] public SolutionInfo? Solution { get; set; }
+
+        public class SolutionInfo
+        {
+            [JsonPropertyName("path")] public string? Path { get; set; }
+
+            [JsonPropertyName("projects")] public List<string>? Projects { get; set; }
+        }
     }
 }

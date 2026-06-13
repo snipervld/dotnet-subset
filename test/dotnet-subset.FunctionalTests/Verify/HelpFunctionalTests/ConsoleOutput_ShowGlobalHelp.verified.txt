@@ -10,4 +10,5 @@ Options:
 
 Commands:
   restore <projectOrSolution>  Create a subset for the restore operation.
+  copy <projectOrSolution>     Create subset of files, including all files of relevant projects.
 

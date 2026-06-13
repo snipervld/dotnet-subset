@@ -1,0 +1,7 @@
+[[restore]]
+test_name="copy_includes_restore_files"
+project_or_solution="MyProject/MyProject.csproj"
+
+[[copy]]
+test_name="copy_includes_restore_files"
+project_or_solution="MyProject/MyProject.csproj"
